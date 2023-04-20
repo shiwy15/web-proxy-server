@@ -1,4 +1,4 @@
-/* part 2. concurrent까지 구현 */
+/* */
 
 #include <stdio.h>
 #include "csapp.h"
@@ -139,7 +139,7 @@ void build_http_header(char *http_header,char *hostname,char *path,int port,rio_
     /* 나머지 헤더 찾기 
       : 클라이언트의 요청 정보와 관련된 정보이나, 타이니 서버로 전달되어야 할 필요가 없거나, 프록시 서버에서 삭제하거나 변경해야 하는 헤더들 
         connection, proxy-connection, user-agent같은 헤더들은 타이니로 전달될 필요가 없으므로, 
-        이 셋을 제외한 다른 헤더가 other_hdr 버퍼에 추가됨 */
+        이 셋을 제외한 다른 헤더가 other_hdr 버퍼에 추가됨  */
     if (strncasecmp(buf, "Connection", strlen("Connection"))
         && strncasecmp(buf, "Proxy-Connection", strlen("Proxy-Connection"))
         && strncasecmp(buf, "User-Agent", strlen("User-Agent"))) {
@@ -147,7 +147,7 @@ void build_http_header(char *http_header,char *hostname,char *path,int port,rio_
     }
   }
 
-  /* 클라이언트가 보낸 요청 헤더에서 host 헤더를 찾지 못했을 경우, host 헤더 생성! */
+  /* 클라이언트가 보낸 요청 헤더에서 host 헤더를 찾지 못했을 경우, host 헤더 생성!*/
   if (strlen(host_hdr) == 0) {
       sprintf(host_hdr,"Host: %s\r\n",hostname);
   }
@@ -202,10 +202,3 @@ void parse_uri(char *uri,char *hostname,char *path,int *port) {
   }
   return;
 }
-
-//---------------------------------
-
-// 캐싱 : 
-// 1. 캐싱 가능한 웹 객체 크기(max object size), 캐시된 객체들의 크기 합은 max cache size를 넘을 수 없도록 구현
-// 2. LRU(least recently used) 삭제 정책을 적용
-// 3. 캐시 접근이 스레드 세이프 하도록 구현(여러 스레드에서 동시에 접근해도 프로그램이 안전해야 함.)

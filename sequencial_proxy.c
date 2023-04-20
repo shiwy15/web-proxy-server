@@ -1,4 +1,9 @@
-/* part 2. concurrent까지 구현 */
+/* Part 1. sequential web proxy
+  : 한 번에 하나씩 요청을 처리하는 웹 서버. 
+    트랜잭션이 완료되면 다음 커넥션을 처리함.
+    처리 도중에 다른 커넥션이 모두 무시되므로 심각한 성능 문제 발생! */
+
+// 생각해 볼 것 : 내가 만든 타이니와 프록시가 서로에게만 연결될 수 있도록 이어줄 수 있을까?
 
 #include <stdio.h>
 #include "csapp.h"
@@ -16,14 +21,12 @@ void doit(int fd);
 void parse_uri(char *uri,char *hostname,char *path,int *port);
 void build_http_header(char *http_header,char *hostname,char *path,int port,rio_t *client_rio);
 int connect_endServer(char *hostname,int port,char *http_header);
-void *thread(void *vargs);
 
 int main(int argc, char **argv) {
   int listenfd, connfd;  // 클라이언트와 소켓 파일디스크립터
   char hostname[MAXLINE], port[MAXLINE]; // 클라이언트의 호스트명과 포트번호 저장
   socklen_t clientlen; // 클라이언트의 소켓 구조체 크기를 저장
   struct sockaddr_storage clientaddr; // 클라이언트의 소켓 주소를 저장
-  pthread_t tid;  // 각 스레드를 식별할 변수
 
   /* command 명령 인자 갯수 체크 */
   if (argc != 2) { 
@@ -40,26 +43,11 @@ int main(int argc, char **argv) {
     /* 소켓 주소 구조체 내용을 문자열로 변환 후, 연결 메세지 반환 */
     Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
     printf("Accepted connection from (%s, %s)\n", hostname, port);
-    /* 🔥 여기서 쓰레드 생성 시작!!! 🔥 */
-    Pthread_create(&tid, NULL, thread, (void *)connfd);  // 스레드 만들기
-    // pthread 라이브러리를 사용하여 스레드를 생성하는 함수 
-      // : 새로운 스레드를 생성하고, thread 함수를 실행하는데, 이 함수는 connfd를 인자로 받는다.
-    // 첫 번째 인자(&tid) : 생성된 스레드의 식별자를 저장한 변수의 주소
-    // 두 번째 인자(NULL) : 스레드의 속성(스택크기, 우선순위 등)을 저장하는 인자. 기본값이 NULL.
-    // 세 번째 인자(thread) : 생성된 스레드가 실행할 함수의 포인터
-    // 네 번째 인자(connfd) : thread 함수로 전달될 데이터. 
+    /* 🔥 여기서 프록시가 중개 시작!!! 🔥 */
+    doit(connfd);
+    close(connfd);
   }
   return 0;
-}
-
-/* 🔥 클라이언트 요청을 처리하기 위한 스레드 함수 */
-void *thread(void *vargs) {
-  int connfd = (int)vargs;
-  Pthread_detach(pthread_self());
-  // 분리형 함수(detachable) : 각 스레드가 독립적으로, 서로의 결과를 기다리지 않으므로 성능향상에 도움
-  // 해당 스레드가 실행 종료 후 자동으로 메모리에서 제거 될 수 있도록 함.
-  doit(connfd);
-  close(connfd);
 }
 
 /* 🔥 클라이언트의 http 요청 처리 ; 근데 이걸 이제 웹서버로 연결 및 서버에게 객체 요청 */ 
@@ -139,7 +127,7 @@ void build_http_header(char *http_header,char *hostname,char *path,int port,rio_
     /* 나머지 헤더 찾기 
       : 클라이언트의 요청 정보와 관련된 정보이나, 타이니 서버로 전달되어야 할 필요가 없거나, 프록시 서버에서 삭제하거나 변경해야 하는 헤더들 
         connection, proxy-connection, user-agent같은 헤더들은 타이니로 전달될 필요가 없으므로, 
-        이 셋을 제외한 다른 헤더가 other_hdr 버퍼에 추가됨 */
+        이 셋을 제외한 다른 헤더가 other_hdr 버퍼에 추가됨  */
     if (strncasecmp(buf, "Connection", strlen("Connection"))
         && strncasecmp(buf, "Proxy-Connection", strlen("Proxy-Connection"))
         && strncasecmp(buf, "User-Agent", strlen("User-Agent"))) {
@@ -147,7 +135,7 @@ void build_http_header(char *http_header,char *hostname,char *path,int port,rio_
     }
   }
 
-  /* 클라이언트가 보낸 요청 헤더에서 host 헤더를 찾지 못했을 경우, host 헤더 생성! */
+  /* 클라이언트가 보낸 요청 헤더에서 host 헤더를 찾지 못했을 경우, host 헤더 생성!*/
   if (strlen(host_hdr) == 0) {
       sprintf(host_hdr,"Host: %s\r\n",hostname);
   }
@@ -202,10 +190,3 @@ void parse_uri(char *uri,char *hostname,char *path,int *port) {
   }
   return;
 }
-
-//---------------------------------
-
-// 캐싱 : 
-// 1. 캐싱 가능한 웹 객체 크기(max object size), 캐시된 객체들의 크기 합은 max cache size를 넘을 수 없도록 구현
-// 2. LRU(least recently used) 삭제 정책을 적용
-// 3. 캐시 접근이 스레드 세이프 하도록 구현(여러 스레드에서 동시에 접근해도 프로그램이 안전해야 함.)
